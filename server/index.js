@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import { createServer } from "http";
 import { WebSocketServer } from "ws";
-import { LiveStore, ExerciseSimulator } from "./live-store.js";
+import { LiveStore } from "./live-store.js";
 
 const PORT = 8000;
 const app = express();
@@ -10,7 +10,6 @@ const httpServer = createServer(app);
 const wss = new WebSocketServer({ server: httpServer, path: "/ws/live" });
 
 const store = new LiveStore();
-const simulator = new ExerciseSimulator(store, 3.5);
 
 app.use(
   cors({
@@ -51,5 +50,4 @@ wss.on("connection", (ws) => {
 
 httpServer.listen(PORT, () => {
   console.log(`Cyberstorm SIEM live server http://localhost:${PORT}`);
-  simulator.start();
 });

