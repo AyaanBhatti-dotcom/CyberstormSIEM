@@ -128,7 +128,7 @@ export function RedTerminal() {
     setErrMsg('');
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/shell`);
+    const ws = new WebSocket(`${proto}//${window.location.hostname}:8000/ws/shell`);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
 
