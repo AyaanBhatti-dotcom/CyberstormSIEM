@@ -9,11 +9,20 @@ const PORT = 8000;
 const app = express();
 const httpServer = createServer(app);
 
-// Live feed WebSocket
-const wss = new WebSocketServer({ server: httpServer, path: "/ws/live" });
+// Both WebSocket servers use noServer so we can route upgrades manually
+const wss = new WebSocketServer({ noServer: true });
+const shellWss = new WebSocketServer({ noServer: true });
 
-// SSH shell WebSocket
-const shellWss = new WebSocketServer({ server: httpServer, path: "/ws/shell" });
+httpServer.on("upgrade", (req, socket, head) => {
+  const path = new URL(req.url, "http://localhost").pathname;
+  if (path === "/ws/live") {
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  } else if (path === "/ws/shell") {
+    shellWss.handleUpgrade(req, socket, head, (ws) => shellWss.emit("connection", ws, req));
+  } else {
+    socket.destroy();
+  }
+});
 
 const store = new LiveStore();
 
