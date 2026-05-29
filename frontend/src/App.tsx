@@ -3,12 +3,16 @@ import { Layout } from './components/Layout';
 import { DataConnectors } from './pages/DataConnectors';
 import { Operations } from './pages/Operations';
 import { Configure, Incidents, Search } from './pages/PlaceholderPages';
+import { RedTerminal } from './pages/RedTerminal';
 import { TeamPage } from './pages/TeamPage';
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Fullscreen — no sidebar */}
+        <Route path="terminal" element={<RedTerminal />} />
+
         <Route element={<Layout />}>
           <Route index element={<Operations />} />
           <Route path="red" element={<TeamPage team="red" />} />

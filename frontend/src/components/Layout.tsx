@@ -9,6 +9,7 @@ import {
   Server,
   Settings,
   Shield,
+  TerminalSquare,
 } from 'lucide-react';
 import { AppBackground } from '@/components/AppBackground';
 import { LiveFeedProvider, useLiveFeedContext } from '../context/LiveFeedContext';
@@ -18,6 +19,7 @@ const nav = [
   { to: '/red', label: 'Red Team', icon: Crosshair },
   { to: '/blue', label: 'Blue Team', icon: Shield },
   { to: '/target', label: 'Metasploitable', icon: Server },
+  { to: '/terminal', label: 'Red Terminal', icon: TerminalSquare },
   { to: '/connectors', label: 'Data Connectors', icon: Plug },
   { to: '/incidents', label: 'Incidents', icon: Activity },
   { to: '/search', label: 'Search', icon: Search },
