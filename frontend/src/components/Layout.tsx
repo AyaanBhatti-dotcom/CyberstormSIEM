@@ -30,7 +30,7 @@ function Shell() {
   const { connected, state, lastActivity } = useLiveFeedContext();
 
   return (
-    <div className="relative isolate flex min-h-screen flex-col">
+    <div className="relative isolate flex h-screen flex-col overflow-hidden">
       <AppBackground />
       <header className="relative z-10 flex h-11 items-center justify-between border-b border-red-900/50 bg-black/80 px-4 text-sm backdrop-blur-md">
         <div className="flex items-center gap-6">
@@ -86,7 +86,7 @@ function Shell() {
           )}
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-auto bg-transparent">
+        <main className="min-w-0 flex-1 overflow-hidden bg-transparent">
           <Outlet />
         </main>
       </div>

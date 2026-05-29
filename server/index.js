@@ -63,15 +63,74 @@ wss.on("connection", (ws) => {
   ws.send(JSON.stringify({ type: "state", data: store.getState() }));
 });
 
+// ── Terminal command → SIEM auto-logger ──────────────────────
+const TOOL_MAP = [
+  [/\bnmap\b/,                   "Network port scan",        "T1046", "medium"],
+  [/\bnetdiscover\b|\barp-scan\b/,"Network host discovery",  "T1018", "low"],
+  [/\bhydra\b|\bmedusa\b|\bpatator\b/, "Brute force attack", "T1110", "high"],
+  [/\bmsfconsole\b/,             "Metasploit framework opened","T1210","high"],
+  [/\bmsfvenom\b/,               "Payload generated",        "T1587", "high"],
+  [/use exploit|run exploit/,    "Exploit module loaded",    "T1210", "critical"],
+  [/\bexploit\b/,                "Exploit executed",         "T1210", "critical"],
+  [/\bgobuster\b|\bdirb\b/,      "Web directory scan",       "T1083", "medium"],
+  [/\bnikto\b/,                  "Web vulnerability scan",   "T1190", "medium"],
+  [/\bsqlmap\b/,                 "SQL injection scan",       "T1190", "high"],
+  [/\benum4linux\b|\bsmbmap\b/,  "SMB enumeration",          "T1135", "medium"],
+  [/\bsmbclient\b/,              "SMB access attempt",       "T1021", "medium"],
+  [/\bnc\b|\bnetcat\b/,          "Netcat connection",        "T1059", "high"],
+  [/\bssh\b/,                    "SSH connection attempt",   "T1021", "medium"],
+  [/\bjohn\b|\bhashcat\b/,       "Password cracking",        "T1110", "high"],
+  [/\bwhoami\b|\bid\b/,          "User identity discovered", "T1033", "low"],
+  [/\buname\b/,                  "System info gathered",     "T1082", "low"],
+  [/\bps\b|\bpstree\b/,          "Process enumeration",      "T1057", "low"],
+  [/\btcpdump\b|\bwireshark\b/,  "Packet capture",           "T1040", "medium"],
+  [/\bcurl\b|\bwget\b/,          "HTTP request made",        "T1105", "low"],
+];
+
+function autoLogCommand(cmd) {
+  const low = cmd.toLowerCase().trim();
+  if (!low || low === "history 1") return;
+  for (const [pattern, action, mitre, severity] of TOOL_MAP) {
+    if (pattern.test(low)) {
+      store.publishEvent({
+        team: "red", actor: "Red Operator", action,
+        severity, outcome: "in_progress",
+        source_host: "kali",
+        message: `Terminal: ${cmd}`,
+        mitre_id: mitre,
+      });
+      return;
+    }
+  }
+  store.publishEvent({
+    team: "red", actor: "Red Operator",
+    action: "Command executed", severity: "info", outcome: "in_progress",
+    source_host: "kali", message: `Terminal: ${cmd}`,
+  });
+}
+
 // ── SSH shell proxy ───────────────────────────────────────────
 shellWss.on("connection", (ws) => {
   const conn = new SSHClient();
   let stream = null;
+  let inputBuf = "";
 
   ws.on("message", (data, isBinary) => {
     // Binary = raw terminal input after shell is up
     if (isBinary) {
-      if (stream) stream.write(data);
+      if (stream) {
+        const ch = data.toString("utf8");
+        if (ch === "\r" || ch === "\n") {
+          const cmd = inputBuf.trim();
+          inputBuf = "";
+          if (cmd) autoLogCommand(cmd);
+        } else if (ch === "\x7f" || ch === "\b") {
+          inputBuf = inputBuf.slice(0, -1);
+        } else if (ch.length === 1 && ch.charCodeAt(0) >= 32) {
+          inputBuf = (inputBuf + ch).slice(-500);
+        }
+        stream.write(data);
+      }
       return;
     }
 
